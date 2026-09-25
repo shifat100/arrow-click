@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Arrows Out — Notice Modal Edition</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body {
+      background-color: #ffffff;
+      color: #000000;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      overflow: hidden;
+    }
+
+    /* ——— Top Bar ——— */
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 14px;
+      border-bottom: 2px solid #000000;
+      background: #ffffff;
+      font-size: 13px;
+      font-weight: 900;
+      z-index: 10;
+    }
+
+    .lives {
+      letter-spacing: 2px;
+      font-size: 15px;
+    }
+
+    /* ——— Game Viewport ——— */
+    .game-viewport {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: visible;
+      padding: 10px;
+    }
+
+    .board-container {
+      position: relative;
+      background: #ffffff;
+      border: 2px dashed #cccccc;
+      border-radius: 6px;
+      overflow: visible;
+    }
+
+    .grid {
+      display: grid;
+      gap: 6px;
+      padding: 6px;
+      overflow: visible;
+    }
+
+    /* ——— Arrow Box Styles ——— */
+    .cell {
+      width: 44px;
+      height: 44px;
+      background: #ffffff;
+      border: 2px solid #000000;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: 900;
+      cursor: pointer;
+      position: relative;
+      z-index: 2;
+      transition: transform 0.1s ease;
+    }
+
+    .cell.empty {
+      border: 2px solid transparent;
+      background: transparent;
+      pointer-events: none;
+    }
+
+    .cell.focused {
+      outline: 3px solid #000000;
+      outline-offset: 2px;
+      background: #000000;
+      color: #ffffff;
+      z-index: 5;
+    }
+
+    .cell.hint-active {
+      background: #000000 !important;
+      color: #ffffff !important;
+      animation: pulse 0.4s infinite alternate;
+    }
+
+    @keyframes pulse {
+      from { transform: scale(1); }
+      to { transform: scale(1.15); }
+    }
+
+    /* ——— উড়ন্ত অ্যানিমেশন ——— */
+    .cell.flying {
+      z-index: 100 !important;
+      pointer-events: none;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+      transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.45s ease-in !important;
+    }
+
+    .fly-UP { transform: translateY(-110vh) scale(0.9) !important; opacity: 0.1 !important; }
+    .fly-DOWN { transform: translateY(110vh) scale(0.9) !important; opacity: 0.1 !important; }
+    .fly-LEFT { transform: translateX(-110vw) scale(0.9) !important; opacity: 0.1 !important; }
+    .fly-RIGHT { transform: translateX(110vw) scale(0.9) !important; opacity: 0.1 !important; }
+
+    /* ——— ধাক্কা খাওয়ার অ্যানিমেশন ——— */
+    .bump-UP { animation: bumpUp 0.22s ease; }
+    .bump-DOWN { animation: bumpDown 0.22s ease; }
+    .bump-LEFT { animation: bumpLeft 0.22s ease; }
+    .bump-RIGHT { animation: bumpRight 0.22s ease; }
+
+    @keyframes bumpUp { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+    @keyframes bumpDown { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(10px); } }
+    @keyframes bumpLeft { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(-10px); } }
+    @keyframes bumpRight { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(10px); } }
+
+    .msg-banner {
+      height: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-top: 12px;
+      text-align: center;
+      color: #000000;
+    }
+
+    /* ——— স্থায়ী নোটিশ পপ-আপ (Modal Dialog) ——— */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(255, 255, 255, 0.94);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-card {
+      background: #ffffff;
+      border: 3px solid #000000;
+      padding: 20px 18px;
+      text-align: center;
+      width: 86%;
+      max-width: 250px;
+      box-shadow: 5px 5px 0px #000000;
+    }
+
+    .modal-card h2 {
+      font-size: 18px;
+      font-weight: 900;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+    }
+
+    .modal-card p {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 14px;
+      color: #333333;
+    }
+
+    .modal-btn {
+      display: inline-block;
+      width: 100%;
+      padding: 10px 0;
+      background: #000000;
+      color: #ffffff;
+      border: 2px solid #000000;
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .modal-btn:active {
+      background: #ffffff;
+      color: #000000;
+    }
+
+    /* ——— KaiOS Bottom Softkeys Bar ——— */
+    .softkeys {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #000000;
+      color: #ffffff;
+      padding: 6px 12px;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      z-index: 10;
+    }
+
+    .softkeys div { flex: 1; }
+    .softkeys div.left { text-align: left; }
+    .softkeys div.right { text-align: right; }
+    .softkeys div.center { text-align: center; font-size: 12px; }
+
+    /* Touch Controls */
+    .touch-controls {
+      display: none;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    @media (pointer: coarse), (min-width: 360px) {
+      .touch-controls { display: flex; }
+      .t-btn {
+        padding: 6px 14px;
+        background: #000000;
+        color: #ffffff;
+        border: none;
+        font-weight: 700;
+        font-size: 11px;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .t-btn:active { background: #555555; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header Bar -->
+  <div class="top-bar">
+    <span id="levelText">LEVEL 1</span>
+    <span id="remText">বাকি: 0</span>
+    <span class="lives" id="livesText">❤❤❤</span>
+  </div>
+
+  <!-- Game Viewport -->
+  <div class="game-viewport">
+    <div class="board-container">
+      <div class="grid" id="gridContainer"></div>
+    </div>
+    <div class="msg-banner" id="statusMsg">ফ্রি তীরটিতে চাপ দিয়ে বের করে দিন!</div>
+
+    <div class="touch-controls">
+      <button class="t-btn" onclick="shootCurrentTile()">SHOOT (OK)</button>
+      <button class="t-btn" onclick="restartLevel()">RESTART</button>
+      <button class="t-btn" onclick="giveHint()">HINT</button>
+    </div>
+  </div>
+
+  <!-- স্থায়ী নোটিশ পপ-আপ উইন্ডো -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal-card">
+      <h2 id="modalTitle">LEVEL COMPLETE!</h2>
+      <p id="modalDesc">সব তীর বের করা হয়েছে!</p>
+      <button class="modal-btn" id="modalActionBtn" onclick="handleModalAction()">পরবর্তী লেভেল (OK / 5)</button>
+    </div>
+  </div>
+
+  <!-- Softkeys Bar -->
+  <div class="softkeys">
+    <div class="left" id="skLeft">Restart</div>
+    <div class="center" id="skCenter">SHOOT (5 / OK)</div>
+    <div class="right" id="skRight">Hint</div>
+  </div>
+
+  <script>
+    const DIRS = {
+      UP:    { symbol: '↑', dr: -1, dc: 0 },
+      RIGHT: { symbol: '→', dr: 0,  dc: 1 },
+      DOWN:  { symbol: '↓', dr: 1,  dc: 0 },
+      LEFT:  { symbol: '←', dr: 0,  dc: -1 }
+    };
+    const DIR_KEYS = ['UP', 'RIGHT', 'DOWN', 'LEFT'];
+
+    let level = 1;
+    let lives = 3;
+    let gridSize = 4;
+    let board = [];
+    let cursorPos = { r: 0, c: 0 };
+    let remainingArrows = 0;
+    let isAnimating = false;
+    let isModalOpen = false;
+    let currentModalType = ''; // 'WIN' বা 'GAMEOVER'
+
+    function initLevel() {
+      lives = 3;
+      isAnimating = false;
+      isModalOpen = false;
+      hideModal();
+
+      gridSize = level >= 3 ? 5 : 4;
+      updateHeader();
+      showMessage("ফ্রি তীরটিতে চাপ দিয়ে বের করে দিন!");
+
+      generateSolvableBoard();
+      renderBoard();
+      autoFocusFirstAvailable();
+      updateSoftkeysDefault();
+    }
+
+    function generateSolvableBoard() {
+      board = Array(gridSize).fill(null).map(() => Array(gridSize).fill(null));
+      let totalToPlace = gridSize === 4 ? 7 + level : 11 + level;
+      let placedCount = 0;
+
+      while (placedCount < totalToPlace) {
+        let emptyCells = [];
+        for (let r = 0; r < gridSize; r++) {
+          for (let c = 0; c < gridSize; c++) {
+            if (!board[r][c]) emptyCells.push({ r, c });
+          }
+        }
+        if (emptyCells.length === 0) break;
+
+        let cell = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+        let freeDirs = DIR_KEYS.filter(d => isPathClear(cell.r, cell.c, d, board));
+
+        if (freeDirs.length > 0) {
+          let chosenDir = freeDirs[Math.floor(Math.random() * freeDirs.length)];
+          board[cell.r][cell.c] = { dir: chosenDir };
+          placedCount++;
+        } else {
+          let fallbackDir = DIR_KEYS[Math.floor(Math.random() * DIR_KEYS.length)];
+          board[cell.r][cell.c] = { dir: fallbackDir };
+          placedCount++;
+        }
+      }
+
+      remainingArrows = 0;
+      for (let r = 0; r < gridSize; r++) {
+        for (let c = 0; c < gridSize; c++) {
+          if (board[r][c]) remainingArrows++;
+        }
+      }
+    }
+
+    function isPathClear(r, c, dir, currentBoard) {
+      const step = DIRS[dir];
+      let currR = r + step.dr;
+      let currC = c + step.dc;
+
+      while (currR >= 0 && currR < gridSize && currC >= 0 && currC < gridSize) {
+        if (currentBoard[currR][currC] !== null) {
+          return false;
+        }
+        currR += step.dr;
+        currC += step.dc;
+      }
+      return true;
+    }
+
+    function renderBoard() {
+      const container = document.getElementById('gridContainer');
+      container.innerHTML = '';
+      container.style.gridTemplateColumns = `repeat(${gridSize}, 44px)`;
+
+      for (let r = 0; r < gridSize; r++) {
+        for (let c = 0; c < gridSize; c++) {
+          const cellDiv = document.createElement('div');
+          cellDiv.className = 'cell';
+          cellDiv.dataset.r = r;
+          cellDiv.dataset.c = c;
+
+          if (board[r][c]) {
+            cellDiv.innerHTML = DIRS[board[r][c].dir].symbol;
+            cellDiv.addEventListener('click', () => onTileClicked(r, c));
+          } else {
+            cellDiv.classList.add('empty');
+          }
+
+          container.appendChild(cellDiv);
+        }
+      }
+      updateCursorView();
+    }
+
+    function updateCursorView() {
+      document.querySelectorAll('.cell').forEach(el => el.classList.remove('focused', 'hint-active'));
+      const active = document.querySelector(`.cell[data-r="${cursorPos.r}"][data-c="${cursorPos.c}"]`);
+      if (active && !active.classList.contains('empty')) {
+        active.classList.add('focused');
+      }
+    }
+
+    function autoFocusFirstAvailable() {
+      for (let r = 0; r < gridSize; r++) {
+        for (let c = 0; c < gridSize; c++) {
+          if (board[r][c]) {
+            cursorPos = { r, c };
+            updateCursorView();
+            return;
+          }
+        }
+      }
+    }
+
+    function shootTile(r, c) {
+      if (isAnimating || isModalOpen || !board[r][c]) return;
+
+      const arrow = board[r][c];
+      const cellEl = document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`);
+      if (!cellEl) return;
+
+      if (isPathClear(r, c, arrow.dir, board)) {
+        isAnimating = true;
+        board[r][c] = null;
+        remainingArrows--;
+        updateHeader();
+        showMessage("উড়ে চলে গেল! 🚀");
+
+        cellEl.classList.add('flying', `fly-${arrow.dir}`);
+
+        setTimeout(() => {
+          cellEl.className = 'cell empty';
+          cellEl.innerHTML = '';
+          cellEl.style.transform = '';
+          cellEl.style.opacity = '';
+          isAnimating = false;
+
+          // সব তীর শেষ হলে স্থায়ী লেভেল কমপ্লিট নোটিশ আসবে
+          if (remainingArrows <= 0) {
+            triggerLevelCompleteModal();
+          } else {
+            autoFocusFirstAvailable();
+          }
+        }, 460);
+
+      } else {
+        cellEl.classList.add(`bump-${arrow.dir}`);
+        lives--;
+        updateHeader();
+        showMessage("সামনে অন্য তীর আছে! ধাক্কা খেলো!");
+
+        setTimeout(() => {
+          cellEl.classList.remove(`bump-${arrow.dir}`);
+        }, 230);
+
+        if (lives <= 0) {
+          triggerGameOverModal();
+        }
+      }
+    }
+
+    function onTileClicked(r, c) {
+      cursorPos = { r, c };
+      updateCursorView();
+      shootTile(r, c);
+    }
+
+    function shootCurrentTile() {
+      shootTile(cursorPos.r, cursorPos.c);
+    }
+
+    /* ——— স্থায়ী নোটিশ হ্যান্ডলার ——— */
+    function triggerLevelCompleteModal() {
+      isModalOpen = true;
+      currentModalType = 'WIN';
+      document.getElementById('modalTitle').innerText = `LEVEL ${level} COMPLETED!`;
+      document.getElementById('modalDesc').innerText = `অভিনন্দন! আপনি সফলভাবে সব তীর মুক্ত করেছেন।`;
+      document.getElementById('modalActionBtn').innerText = `NEXT LEVEL (OK / 5) ▶`;
+      
+      document.getElementById('skLeft').innerText = '';
+      document.getElementById('skCenter').innerText = 'NEXT LEVEL (5)';
+      document.getElementById('skRight').innerText = '';
+
+      document.getElementById('modalOverlay').classList.add('active');
+    }
+
+    function triggerGameOverModal() {
+      isModalOpen = true;
+      currentModalType = 'GAMEOVER';
+      document.getElementById('modalTitle').innerText = `GAME OVER!`;
+      document.getElementById('modalDesc').innerText = `আপনার সব লাইফ শেষ হয়ে গেছে!`;
+      document.getElementById('modalActionBtn').innerText = `RETRY LEVEL (OK / 5) ↻`;
+
+      document.getElementById('skLeft').innerText = '';
+      document.getElementById('skCenter').innerText = 'RETRY (5)';
+      document.getElementById('skRight').innerText = '';
+
+      document.getElementById('modalOverlay').classList.add('active');
+    }
+
+    function handleModalAction() {
+      if (!isModalOpen) return;
+      if (currentModalType === 'WIN') {
+        level++;
+        initLevel();
+      } else if (currentModalType === 'GAMEOVER') {
+        initLevel();
+      }
+    }
+
+    function hideModal() {
+      document.getElementById('modalOverlay').classList.remove('active');
+    }
+
+    function updateSoftkeysDefault() {
+      document.getElementById('skLeft').innerText = 'Restart';
+      document.getElementById('skCenter').innerText = 'SHOOT (5 / OK)';
+      document.getElementById('skRight').innerText = 'Hint';
+    }
+
+    function restartLevel() {
+      if (isModalOpen) return;
+      initLevel();
+      showMessage("লেভেল রিস্টার্ট হয়েছে");
+    }
+
+    function giveHint() {
+      if (isModalOpen) return;
+      for (let r = 0; r < gridSize; r++) {
+        for (let c = 0; c < gridSize; c++) {
+          if (board[r][c] && isPathClear(r, c, board[r][c].dir, board)) {
+            cursorPos = { r, c };
+            updateCursorView();
+            const el = document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`);
+            if (el) el.classList.add('hint-active');
+            showMessage("এই তীরটি বের হতে পারবে!");
+            return;
+          }
+        }
+      }
+    }
+
+    function showMessage(msg) {
+      document.getElementById('statusMsg').innerText = msg;
+    }
+
+    function updateHeader() {
+      document.getElementById('levelText').innerText = `LEVEL ${level}`;
+      document.getElementById('remText').innerText = `বাকি: ${remainingArrows}`;
+      document.getElementById('livesText').innerText = '❤'.repeat(Math.max(0, lives));
+    }
+
+    // ——— কাই ওএস কীপ্যাড হ্যান্ডলার ———
+    window.addEventListener('keydown', (e) => {
+      // যদি নোটিশ খোলা থাকে তবে শুধুমাত্র OK/5 কাজ করবে
+      if (isModalOpen) {
+        if (e.key === 'Enter' || e.key === '5' || e.key === 'Select') {
+          handleModalAction();
+          e.preventDefault();
+        }
+        return;
+      }
+
+      switch (e.key) {
+        case 'ArrowUp':
+        case '2':
+          for (let r = cursorPos.r - 1; r >= 0; r--) {
+            if (board[r][cursorPos.c]) { cursorPos.r = r; break; }
+          }
+          updateCursorView();
+          break;
+
+        case 'ArrowDown':
+        case '8':
+          for (let r = cursorPos.r + 1; r < gridSize; r++) {
+            if (board[r][cursorPos.c]) { cursorPos.r = r; break; }
+          }
+          updateCursorView();
+          break;
+
+        case 'ArrowLeft':
+        case '4':
+          for (let c = cursorPos.c - 1; c >= 0; c--) {
+            if (board[cursorPos.r][c]) { cursorPos.c = c; break; }
+          }
+          updateCursorView();
+          break;
+
+        case 'ArrowRight':
+        case '6':
+          for (let c = cursorPos.c + 1; c < gridSize; c++) {
+            if (board[cursorPos.r][c]) { cursorPos.c = c; break; }
+          }
+          updateCursorView();
+          break;
+
+        case 'Enter':
+        case '5':
+        case 'Select':
+          shootCurrentTile();
+          break;
+
+        case 'SoftLeft':
+        case 'F1':
+        case 'q':
+        case 'Q':
+          restartLevel();
+          break;
+
+        case 'SoftRight':
+        case 'F2':
+        case 'e':
+        case 'E':
+          giveHint();
+          break;
+
+        case 'Backspace':
+        case 'Escape':
+          restartLevel();
+          e.preventDefault();
+          break;
+      }
+    });
+
+    initLevel();
+  </script>
+</body>
+  </html>
